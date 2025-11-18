@@ -1,5 +1,6 @@
 import os
 
+from dotenv.main import load_dotenv
 import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
@@ -10,6 +11,7 @@ from mlflow.tracking import MlflowClient
 from sklearn.metrics import (accuracy_score, auc, classification_report,
                              confusion_matrix, roc_curve)
 
+load_dotenv() # for local dev
 
 def load_config(config_path="config.yaml"):
     """Loads the configuration from a YAML file."""

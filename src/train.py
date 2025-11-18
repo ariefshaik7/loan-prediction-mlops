@@ -1,5 +1,6 @@
 import os
 
+from dotenv.main import load_dotenv
 import mlflow
 import mlflow.sklearn
 import numpy as np
@@ -12,6 +13,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+load_dotenv() # for local dev
 
 def load_config(config_path="config.yaml"):
     """Loads the configuration from a YAML file."""
