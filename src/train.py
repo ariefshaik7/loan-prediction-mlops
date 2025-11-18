@@ -1,19 +1,20 @@
 import os
 
-from dotenv.main import load_dotenv
 import mlflow
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 import yaml
+from dotenv.main import load_dotenv
 from mlflow.models import infer_signature
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-load_dotenv() # for local dev
+load_dotenv()  # for local dev
+
 
 def load_config(config_path="config.yaml"):
     """Loads the configuration from a YAML file."""

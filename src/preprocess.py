@@ -34,7 +34,7 @@ def preprocess_data(config):
         .str.strip()
         .replace({"Approved": 1, "Rejected": 0})
         .infer_objects(copy=False)
-    )  
+    )
 
     X = df.drop("loan_status", axis=1)
     y = df["loan_status"]

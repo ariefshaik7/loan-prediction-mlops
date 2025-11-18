@@ -1,17 +1,23 @@
 import os
 
-from dotenv.main import load_dotenv
 import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
 import pandas as pd
 import seaborn as sns
 import yaml
+from dotenv.main import load_dotenv
 from mlflow.tracking import MlflowClient
-from sklearn.metrics import (accuracy_score, auc, classification_report,
-                             confusion_matrix, roc_curve)
+from sklearn.metrics import (
+    accuracy_score,
+    auc,
+    classification_report,
+    confusion_matrix,
+    roc_curve,
+)
 
-load_dotenv() # for local dev
+load_dotenv()  # for local dev
+
 
 def load_config(config_path="config.yaml"):
     """Loads the configuration from a YAML file."""
@@ -128,8 +134,6 @@ def evaluate_model(config):
     X_test = test_df.drop("loan_status", axis=1)
     y_test = test_df["loan_status"]
 
-    
-
     with mlflow.start_run(run_id=run_id) as run:
         print("Re-opened MLflow run to log evaluation metrics.")
 
@@ -153,7 +157,6 @@ def evaluate_model(config):
         mlflow.log_metric("test_precision_class_1", report_dict["1"]["precision"])
         mlflow.log_metric("test_recall_class_1", report_dict["1"]["recall"])
         mlflow.log_metric("test_f1_class_1", report_dict["1"]["f1-score"])
-
 
         # Generate, save, and log plots
         cm_fig = plot_confusion_matrix(y_test, y_pred)
