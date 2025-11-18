@@ -119,6 +119,7 @@ def train_model(config):
             name="model",
             signature=signature,
             input_example=input_example,
+            registered_model_name=config["mlflow_config"]["registered_model_name"],
         )
         print("Model logged to MLflow.")
 
