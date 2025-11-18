@@ -2,6 +2,7 @@
 mlflow_config:
   tracking_uri: 'databricks'
   experiment_name: '/Users/vevihaj902@etramay.com/Loan Approval Project'
+  registered_model_name: 'workspace.ml_models.loanapprovalmodel'
 
 # 2. Data paths
 data:
