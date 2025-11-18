@@ -1,0 +1,29 @@
+# 1. MLflow Configuration
+mlflow_config:
+  tracking_uri: 'databricks'
+  experiment_name: '/Users/kojila9032@fermiro.com/Loan Approval Project'
+
+# 2. Data paths
+data:
+  raw_file: 'data/raw/loan_dataset.csv'
+  processed_dir: 'data/processed'
+  train_file: 'data/processed/train.csv'
+  test_file: 'data/processed/test.csv'
+
+# 3. Preprocessing parameters
+preprocessing:
+  test_size: 0.2
+  random_state: 42
+
+# 4. Artifact paths
+artifacts:
+  model_dir: 'models'
+  model_file: 'models/loan_approval_pipeline.joblib'
+# 5. Model Training parameters
+training:
+  param_grid:
+    model__n_estimators: [100, 200]
+    model__max_depth: [3, 5]
+    model__learning_rate: [0.05, 0.1]
+  cv_folds: 5
+  scoring: 'accuracy'
