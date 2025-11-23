@@ -124,6 +124,7 @@ def train_model(config):
         print("Model logged to MLflow.")
 
     print("\nTraining complete.")
+    return run_id
 
 
 if __name__ == "__main__":
