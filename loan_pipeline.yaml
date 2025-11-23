@@ -1,0 +1,424 @@
+# PIPELINE DEFINITION
+# Name: loan-prediction-pipeline
+# Description: End-to-end MLOps pipeline using Custom PVC Component
+# Inputs:
+#    config_path: str [Default: 'config.yaml']
+#    data_url: str [Default: 'https://mlopsstorage15213.blob.core.windows.net/dvcstore/project1/files/md5/3f/5393ef717b67531cd8a4a48f490221?sp=r&st=2025-11-23T04:50:22Z&se=2025-11-25T13:05:22Z&sv=2024-11-04&sr=b&sig=o%2FUmM52%2BUFQJiJYy%2BJ3KK2CHEh3NyUzSIeS7u756xw8%3D']
+components:
+  comp-create-pvc-op:
+    executorLabel: exec-create-pvc-op
+    inputDefinitions:
+      parameters:
+        access_mode:
+          parameterType: STRING
+        pvc_name:
+          parameterType: STRING
+        size:
+          parameterType: STRING
+        storage_class:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-evaluate-op:
+    executorLabel: exec-evaluate-op
+    inputDefinitions:
+      parameters:
+        config_path:
+          parameterType: STRING
+        run_id:
+          parameterType: STRING
+  comp-ingest-op:
+    executorLabel: exec-ingest-op
+    inputDefinitions:
+      parameters:
+        data_url:
+          parameterType: STRING
+        output_data_path:
+          parameterType: STRING
+  comp-preprocess-op:
+    executorLabel: exec-preprocess-op
+    inputDefinitions:
+      parameters:
+        config_path:
+          parameterType: STRING
+  comp-train-op:
+    executorLabel: exec-train-op
+    inputDefinitions:
+      parameters:
+        config_path:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-create-pvc-op:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - create_pvc_op
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kubernetes'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef create_pvc_op(\n    pvc_name: str, size: str, storage_class:\
+          \ str, access_mode: str\n) -> str:\n    \"\"\"\n    Custom component to\
+          \ create a PVC using the Kubernetes Python Client.\n    This replaces the\
+          \ deprecated VolumeOp and the buggy kfp.kubernetes.CreatePVC.\n    \"\"\"\
+          \n    import time\n\n    from kubernetes import client, config\n\n    print(f\"\
+          --- Creating PVC: {pvc_name} ---\")\n\n    # 1. Authenticate with the cluster\n\
+          \    try:\n        config.load_incluster_config()\n        print(\"Loaded\
+          \ in-cluster config.\")\n    except Exception:\n        print(\n       \
+          \     \"Warning: Could not load in-cluster config. Trying local (only works\
+          \ if running locally).\"\n        )\n        config.load_kube_config()\n\
+          \n    v1 = client.CoreV1Api()\n\n    # 2. Define the PVC object\n    pvc_manifest\
+          \ = {\n        \"apiVersion\": \"v1\",\n        \"kind\": \"PersistentVolumeClaim\"\
+          ,\n        \"metadata\": {\n            \"name\": pvc_name\n           \
+          \ # Namespace is automatic (defaults to the workflow's namespace)\n    \
+          \    },\n        \"spec\": {\n            \"accessModes\": [access_mode],\n\
+          \            \"resources\": {\"requests\": {\"storage\": size}},\n     \
+          \       # If storage_class is not empty, set it\n            \"storageClassName\"\
+          : storage_class if storage_class else None,\n        },\n    }\n\n    #\
+          \ 3. Create it (Idempotent check)\n    try:\n        # We need the current\
+          \ namespace. In KFP, it's usually in /var/run/secrets...\n        # or we\
+          \ can read it from the service account context.\n        # However, create_namespaced_pvc\
+          \ requires a namespace.\n        # A safe bet in KFP is to read the namespace\
+          \ file standard in K8s pods.\n        with open(\"/var/run/secrets/kubernetes.io/serviceaccount/namespace\"\
+          , \"r\") as f:\n            current_namespace = f.read().strip()\n\n   \
+          \     print(f\"Target Namespace: {current_namespace}\")\n\n        v1.create_namespaced_persistent_volume_claim(\n\
+          \            namespace=current_namespace, body=pvc_manifest\n        )\n\
+          \        print(f\"PVC {pvc_name} created successfully.\")\n\n    except\
+          \ client.exceptions.ApiException as e:\n        if e.status == 409:\n  \
+          \          print(f\"PVC {pvc_name} already exists. Using existing volume.\"\
+          )\n        else:\n            raise e\n\n    # 4. Return the name so subsequent\
+          \ steps can mount it\n    return pvc_name\n\n"
+        image: python:3.9
+    exec-evaluate-op:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_op
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_op(config_path: str, run_id: str):\n    import os\n\
+          \    import sys\n\n    sys.path.append(\"/app\")\n\n    os.environ[\"MLFLOW_RUN_ID\"\
+          ] = run_id\n\n    from src.evaluate import evaluate_model, load_config,\
+          \ setup_mlflow\n\n    print(f\"--- Evaluation Started (run_id={run_id})\
+          \ ---\")\n    config = load_config(config_path)\n    setup_mlflow(config)\n\
+          \    evaluate_model(config)\n    print(\"--- Evaluation Finished ---\")\n\
+          \n"
+        image: ariefshaik007/loan-prediction-mlops:v01
+    exec-ingest-op:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - ingest_op
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'requests'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef ingest_op(data_url: str, output_data_path: str):\n    import\
+          \ os\n\n    import pandas as pd\n\n    print(f\"--- Downloading data from\
+          \ {data_url} ---\")\n\n    os.makedirs(os.path.dirname(output_data_path),\
+          \ exist_ok=True)\n\n    df = pd.read_csv(data_url)\n\n    df.to_csv(output_data_path,\
+          \ index=False)\n\n    print(f\"--- Data saved to {output_data_path} ---\"\
+          )\n\n"
+        image: ariefshaik007/loan-prediction-mlops:v01
+    exec-preprocess-op:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - preprocess_op
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef preprocess_op(config_path: str):\n    import sys\n\n    sys.path.append(\"\
+          /app\")\n    from src.preprocess import load_config, setup_mlflow, preprocess_data\n\
+          \n    print(\"--- Preprocessing Started ---\")\n    config = load_config(config_path)\n\
+          \    setup_mlflow(config)\n    preprocess_data(config)\n    print(\"---\
+          \ Preprocessing Finished ---\")\n\n"
+        image: ariefshaik007/loan-prediction-mlops:v01
+    exec-train-op:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_op
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_op(config_path: str) -> str:\n    import sys\n\n    sys.path.append(\"\
+          /app\")\n    from src.train import load_config, setup_mlflow, train_model\n\
+          \n    print(\"--- Training Started ---\")\n    config = load_config(config_path)\n\
+          \n    setup_mlflow(config)\n\n    run_id = train_model(config)\n\n    print(f\"\
+          --- Training Finished (run_id={run_id}) ---\")\n    return run_id\n\n"
+        image: ariefshaik007/loan-prediction-mlops:v01
+pipelineInfo:
+  description: End-to-end MLOps pipeline using Custom PVC Component
+  name: loan-prediction-pipeline
+root:
+  dag:
+    tasks:
+      create-pvc-op:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-create-pvc-op
+        inputs:
+          parameters:
+            access_mode:
+              runtimeValue:
+                constant: ReadWriteOnce
+            pvc_name:
+              runtimeValue:
+                constant: loan-data-pvc-v2
+            size:
+              runtimeValue:
+                constant: 1Gi
+            storage_class:
+              runtimeValue:
+                constant: microk8s-hostpath
+        taskInfo:
+          name: create-pvc-op
+      evaluate-op:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate-op
+        dependentTasks:
+        - create-pvc-op
+        - train-op
+        inputs:
+          parameters:
+            config_path:
+              componentInputParameter: config_path
+            run_id:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: train-op
+        taskInfo:
+          name: evaluate-op
+      ingest-op:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-ingest-op
+        dependentTasks:
+        - create-pvc-op
+        inputs:
+          parameters:
+            data_url:
+              componentInputParameter: data_url
+            output_data_path:
+              runtimeValue:
+                constant: /app/data/raw/loan_dataset.csv
+        taskInfo:
+          name: ingest-op
+      preprocess-op:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-preprocess-op
+        dependentTasks:
+        - create-pvc-op
+        - ingest-op
+        inputs:
+          parameters:
+            config_path:
+              componentInputParameter: config_path
+        taskInfo:
+          name: preprocess-op
+      train-op:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-op
+        dependentTasks:
+        - create-pvc-op
+        - preprocess-op
+        inputs:
+          parameters:
+            config_path:
+              componentInputParameter: config_path
+        taskInfo:
+          name: train-op
+  inputDefinitions:
+    parameters:
+      config_path:
+        defaultValue: config.yaml
+        isOptional: true
+        parameterType: STRING
+      data_url:
+        defaultValue: https://mlopsstorage15213.blob.core.windows.net/dvcstore/project1/files/md5/3f/5393ef717b67531cd8a4a48f490221?sp=r&st=2025-11-23T04:50:22Z&se=2025-11-25T13:05:22Z&sv=2024-11-04&sr=b&sig=o%2FUmM52%2BUFQJiJYy%2BJ3KK2CHEh3NyUzSIeS7u756xw8%3D
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.14.6
+---
+platforms:
+  kubernetes:
+    deploymentSpec:
+      executors:
+        exec-evaluate-op:
+          pvcMount:
+          - mountPath: /app/data
+            pvcNameParameter:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: create-pvc-op
+            taskOutputParameter:
+              outputParameterKey: Output
+              producerTask: create-pvc-op
+          secretAsEnv:
+          - keyToEnv:
+            - envVar: DATABRICKS_HOST
+              secretKey: host
+            - envVar: DATABRICKS_TOKEN
+              secretKey: token
+            secretName: databricks-secret
+            secretNameParameter:
+              runtimeValue:
+                constant: databricks-secret
+        exec-ingest-op:
+          pvcMount:
+          - mountPath: /app/data
+            pvcNameParameter:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: create-pvc-op
+            taskOutputParameter:
+              outputParameterKey: Output
+              producerTask: create-pvc-op
+        exec-preprocess-op:
+          pvcMount:
+          - mountPath: /app/data
+            pvcNameParameter:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: create-pvc-op
+            taskOutputParameter:
+              outputParameterKey: Output
+              producerTask: create-pvc-op
+          secretAsEnv:
+          - keyToEnv:
+            - envVar: DATABRICKS_HOST
+              secretKey: host
+            - envVar: DATABRICKS_TOKEN
+              secretKey: token
+            secretName: databricks-secret
+            secretNameParameter:
+              runtimeValue:
+                constant: databricks-secret
+        exec-train-op:
+          pvcMount:
+          - mountPath: /app/data
+            pvcNameParameter:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: create-pvc-op
+            taskOutputParameter:
+              outputParameterKey: Output
+              producerTask: create-pvc-op
+          secretAsEnv:
+          - keyToEnv:
+            - envVar: DATABRICKS_HOST
+              secretKey: host
+            - envVar: DATABRICKS_TOKEN
+              secretKey: token
+            secretName: databricks-secret
+            secretNameParameter:
+              runtimeValue:
+                constant: databricks-secret
