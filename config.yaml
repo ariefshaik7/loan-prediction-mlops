@@ -1,30 +1,34 @@
-# 1. MLflow Configuration
-mlflow_config:
-  tracking_uri: 'databricks'
-  experiment_name: '/Users/ariefshaik2006@gmail.com/Loan Approval Project'
-  registered_model_name: 'workspace.ml_models.loanapprovalmodel'
+system:
+  project_name: "loan-prediction"
+  docker_image: "ariefshaik007/loan-prediction-mlops:v01"
 
-# 2. Data paths
+# Data paths
 data:
-  raw_file: 'data/raw/loan_dataset.csv'
-  processed_dir: 'data/processed'
-  train_file: 'data/processed/train.csv'
-  test_file: 'data/processed/test.csv'
+  raw_url: "https://mlopsstorage15213.blob.core.windows.net/dvcstore/project1/files/md5/3f/5393ef717b67531cd8a4a48f490221?sp=r&st=2025-11-23T04:50:22Z&se=2025-11-25T13:05:22Z&sv=2024-11-04&sr=b&sig=o%2FUmM52%2BUFQJiJYy%2BJ3KK2CHEh3NyUzSIeS7u756xw8%3D"
+  processed_dir: "data/processed"
+  train_file: "data/processed/train.csv"
+  test_file: "data/processed/test.csv"
 
-# 3. Preprocessing parameters
+# MLflow Configuration
+mlflow_config:
+  tracking_uri: "databricks"
+  experiment_name: "/Users/ariefshaik2006@gmail.com/Loan Approval Project"
+  registered_model_name: "workspace.ml_models.loanapprovalmodel"
+
+# Preprocessing parameters
 preprocessing:
   test_size: 0.2
   random_state: 42
 
-# 4. Artifact paths
+# Artifact paths
 artifacts:
-  model_dir: 'models'
-  model_file: 'models/loan_approval_pipeline.joblib'
-# 5. Model Training parameters
+  model_dir: "models"
+  model_file: "models/loan_approval_pipeline.joblib"
+# Model Training parameters
 training:
   param_grid:
     model__n_estimators: [100, 200]
     model__max_depth: [3, 5]
     model__learning_rate: [0.05, 0.1]
   cv_folds: 5
-  scoring: 'accuracy'
+  scoring: "accuracy"
