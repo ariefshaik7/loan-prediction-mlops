@@ -96,7 +96,7 @@ def loan_prediction_pipeline(
     pvc_task = create_pvc_op(
         pvc_name="loan-data-pvc-v2",  # Static name is safer for re-runs
         size="1Gi",
-        storage_class="microk8s-hostpath",  # <--- CHANGE IF NEEDED (e.g. 'standard', 'managed-csi')
+        storage_class="microk8s-hostpath", 
         access_mode="ReadWriteOnce",
     )
 
